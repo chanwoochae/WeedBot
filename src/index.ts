@@ -19,13 +19,14 @@ client.once("ready", () => {
 });
 
 client.on("messageCreate", async (message: Message) => {
-  // 봇 메시지 무시
   if (message.author.bot) return;
 
-  // DM 또는 봇 멘션 시에만 반응
   const isDM = !message.guild;
   const isMentioned = message.mentions.has(client.user!);
   if (!isDM && !isMentioned) return;
+
+  const channel = message.channel;
+  if (!channel.isSendable()) return;
 
   const userInput = message.content
     .replace(/<@!?\d+>/g, "")
@@ -33,21 +34,15 @@ client.on("messageCreate", async (message: Message) => {
 
   if (!userInput) return;
 
-  // 타이핑 표시
-  await message.channel.sendTyping();
+  await channel.sendTyping();
 
   try {
-    // 히스토리 조회
     const history = await getHistory(message.author.id);
-
-    // LLM 호출 (Ollama → Gemini 폴백)
     const { reply, model } = await chat(userInput, history);
 
-    // 히스토리 저장
     await saveMessage(message.author.id, "user", userInput);
     await saveMessage(message.author.id, "assistant", reply);
 
-    // 2000자 Discord 제한 처리
     const footer = model !== "ollama" ? `\n\n*\`${model}\` 로 답변했어 (맥북 오프라인)*` : "";
     const fullReply = reply + footer;
 
@@ -56,7 +51,7 @@ client.on("messageCreate", async (message: Message) => {
     } else {
       const chunks = fullReply.match(/[\s\S]{1,1990}/g) ?? [];
       for (const chunk of chunks) {
-        await message.channel.send(chunk);
+        await channel.send(chunk);
       }
     }
   } catch (e) {
