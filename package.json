@@ -1,0 +1,22 @@
+{
+  "name": "ccw-secretary",
+  "version": "1.0.0",
+  "description": "CCW의 개인 AI 비서 — Discord Bot + Ollama (Gemma4:31b) + Gemini Flash 폴백",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "discord.js": "^14.16.0",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

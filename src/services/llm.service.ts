@@ -1,0 +1,98 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "gemma4:27b";
+const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS ?? 10000);
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+
+interface HistoryEntry {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface ChatResult {
+  reply: string;
+  model: "ollama" | string;
+}
+
+export async function chat(
+  userInput: string,
+  history: HistoryEntry[],
+): Promise<ChatResult> {
+  // 1차: Ollama (MacBook)
+  try {
+    const reply = await callOllama(userInput, history);
+    return { reply, model: "ollama" };
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    console.warn(`⚠️ Ollama 실패: ${err} → Gemini 폴백`);
+  }
+
+  // 2차: Gemini Flash 폴백
+  try {
+    const reply = await callGemini(userInput, history);
+    return { reply, model: GEMINI_MODEL };
+  } catch (e) {
+    throw new Error("Ollama + Gemini 모두 실패");
+  }
+}
+
+async function callOllama(
+  userInput: string,
+  history: HistoryEntry[],
+): Promise<string> {
+  const messages = [
+    {
+      role: "system",
+      content: "너는 CCW의 개인 AI 비서야. 한국어로 친근하게 대화해.",
+    },
+    ...history.map((h) => ({ role: h.role, content: h.content })),
+    { role: "user", content: userInput },
+  ];
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        messages,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const data = await res.json() as { message: { content: string } };
+    return data.message.content;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function callGemini(
+  userInput: string,
+  history: HistoryEntry[],
+): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY 없음");
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    systemInstruction: "너는 CCW의 개인 AI 비서야. 한국어로 친근하게 대화해.",
+  });
+
+  const geminiHistory = history.map((h) => ({
+    role: h.role === "assistant" ? "model" : "user",
+    parts: [{ text: h.content }],
+  }));
+
+  const chatSession = model.startChat({ history: geminiHistory });
+  const result = await chatSession.sendMessage(userInput);
+  return result.response.text();
+}
