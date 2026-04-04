@@ -14,18 +14,13 @@ const client = new Client({
   ],
 });
 
-const ALLOWED_USER_ID = process.env.DISCORD_ALLOWED_USER_ID;
-
 client.once("ready", () => {
-  console.log(`✅ CCW Secretary online: ${client.user?.tag}`);
+  console.log(`✅ WeedBot online: ${client.user?.tag}`);
 });
 
 client.on("messageCreate", async (message: Message) => {
   // 봇 메시지 무시
   if (message.author.bot) return;
-
-  // 나만 사용 가능
-  if (ALLOWED_USER_ID && message.author.id !== ALLOWED_USER_ID) return;
 
   // DM 또는 봇 멘션 시에만 반응
   const isDM = !message.guild;
@@ -59,7 +54,6 @@ client.on("messageCreate", async (message: Message) => {
     if (fullReply.length <= 2000) {
       await message.reply(fullReply);
     } else {
-      // 청크 분할
       const chunks = fullReply.match(/[\s\S]{1,1990}/g) ?? [];
       for (const chunk of chunks) {
         await message.channel.send(chunk);
