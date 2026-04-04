@@ -1,11 +1,18 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 const HISTORY_WINDOW = Number(process.env.HISTORY_WINDOW ?? 20);
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_KEY!,
-);
+let _supabase: SupabaseClient | null = null;
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_KEY!,
+    );
+  }
+  return _supabase;
+}
 
 interface HistoryEntry {
   role: "user" | "assistant";
@@ -13,7 +20,7 @@ interface HistoryEntry {
 }
 
 export async function getHistory(userId: string): Promise<HistoryEntry[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("secretary_messages")
     .select("role, content")
     .eq("user_id", userId)
@@ -33,7 +40,7 @@ export async function saveMessage(
   role: "user" | "assistant",
   content: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from("secretary_messages")
     .insert({ user_id: userId, role, content });
 
