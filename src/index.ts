@@ -14,7 +14,7 @@ const client = new Client({
   ],
 });
 
-client.once("ready", () => {
+client.once("clientReady", () => {
   console.log(`✅ WeedBot online: ${client.user?.tag}`);
 });
 
@@ -43,7 +43,10 @@ client.on("messageCreate", async (message: Message) => {
     await saveMessage(message.author.id, "user", userInput);
     await saveMessage(message.author.id, "assistant", reply);
 
-    const footer = model !== "ollama" ? `\n\n*\`${model}\` 로 답변했어 (맥북 오프라인)*` : "";
+    const modelLabel = model === "ollama"
+      ? `${process.env.OLLAMA_MODEL ?? "ollama"}`
+      : `${model} (맥북 오프라인)`;
+    const footer = `\n\n*\`${modelLabel}\`*`;
     const fullReply = reply + footer;
 
     if (fullReply.length <= 2000) {
