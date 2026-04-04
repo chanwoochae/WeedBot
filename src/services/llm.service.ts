@@ -1,9 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "gemma4:27b";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "gemma4:31b";
 const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS ?? 10000);
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3-flash";
 
 interface HistoryEntry {
   role: "user" | "assistant";
@@ -28,11 +28,13 @@ export async function chat(
     console.warn(`⚠️ Ollama 실패: ${err} → Gemini 폴백`);
   }
 
-  // 2차: Gemini Flash 폴백
+  // 2차: Gemini 폴백
   try {
     const reply = await callGemini(userInput, history);
     return { reply, model: GEMINI_MODEL };
   } catch (e) {
+    const err = e instanceof Error ? e.message : String(e);
+    console.error(`❌ Gemini 실패: ${err}`);
     throw new Error("Ollama + Gemini 모두 실패");
   }
 }
