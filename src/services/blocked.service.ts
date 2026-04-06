@@ -1,9 +1,17 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_KEY!,
-);
+// dotenv.config()가 index.ts에서 먼저 호출된 후 사용되도록 lazy init
+let _supabase: SupabaseClient | null = null;
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_KEY!,
+    );
+  }
+  return _supabase;
+}
 
 export interface BlockedItem {
   id: number;
@@ -17,7 +25,7 @@ export interface BlockedItem {
 
 // PENDING 목록 조회
 export async function listPending(): Promise<BlockedItem[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("blocked_queue")
     .select("*")
     .eq("status", "PENDING")
@@ -30,7 +38,7 @@ export async function listPending(): Promise<BlockedItem[]> {
 
 // 완료 처리
 export async function markDone(id: number): Promise<void> {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from("blocked_queue")
     .update({ status: "DONE", updated_at: new Date().toISOString() })
     .eq("id", id);
@@ -40,7 +48,7 @@ export async function markDone(id: number): Promise<void> {
 
 // 스킵 처리
 export async function markSkipped(id: number): Promise<void> {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from("blocked_queue")
     .update({ status: "SKIPPED", updated_at: new Date().toISOString() })
     .eq("id", id);
@@ -58,16 +66,14 @@ export async function getCollectStatus(): Promise<{
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("blocked_queue")
     .select("status, created_at");
 
   if (error) throw error;
 
   const all = data ?? [];
-  const todayItems = all.filter(
-    (r) => new Date(r.created_at) >= today,
-  );
+  const todayItems = all.filter((r) => new Date(r.created_at) >= today);
 
   return {
     pending: all.filter((r) => r.status === "PENDING").length,
