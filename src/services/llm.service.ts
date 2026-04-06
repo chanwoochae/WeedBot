@@ -38,6 +38,28 @@ export async function chat(
   }
 }
 
+// Ollama 연결 상태 확인 (5초 타임아웃)
+export async function checkActiveModel(): Promise<{
+  active: "ollama" | "gemini";
+  modelName: string;
+  ollamaOnline: boolean;
+}> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (res.ok) {
+      return { active: "ollama", modelName: OLLAMA_MODEL, ollamaOnline: true };
+    }
+  } catch {
+    // Ollama 오프라인
+  }
+  return { active: "gemini", modelName: GEMINI_MODEL, ollamaOnline: false };
+}
+
 async function callOllama(
   userInput: string,
   history: HistoryEntry[],
