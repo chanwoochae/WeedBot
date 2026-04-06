@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits, Message } from "discord.js";
 import dotenv from "dotenv";
-import { chat } from "./services/llm.service";
-import { getHistory, saveMessage } from "./services/history.service";
+import { chat, checkActiveModel } from "./services/llm.service";
+import { getHistory, saveMessage, clearHistory } from "./services/history.service";
 import {
   listPending,
   markDone,
@@ -34,6 +34,29 @@ async function handleCommand(
   if (!channel.isSendable()) return false;
 
   switch (command) {
+    // ── 대화 히스토리 초기화 ──
+    case "!clear": {
+      const count = await clearHistory(message.author.id);
+      await channel.send(`🗑️ 대화 히스토리 ${count}개 삭제했어. 새로 시작해보자!`);
+      return true;
+    }
+
+    // ── 현재 사용 모델 확인 ──
+    case "!model": {
+      const { active, modelName, ollamaOnline } = await checkActiveModel();
+      if (active === "ollama") {
+        await channel.send(
+          `🟢 **현재 모델: ${modelName}**\n맥북 온라인 — Ollama (로컬 LLM)`,
+        );
+      } else {
+        await channel.send(
+          `🟡 **현재 모델: ${modelName}**\n맥북 오프라인 — Gemini 폴백 중`,
+        );
+      }
+      return true;
+    }
+
+    // ── 차단 큐 목록 ──
     case "!list": {
       const items = await listPending();
       if (items.length === 0) {
@@ -57,6 +80,7 @@ async function handleCommand(
       return true;
     }
 
+    // ── 완료 처리 ──
     case "!done": {
       const id = parseInt(args[0]);
       if (isNaN(id)) {
@@ -68,6 +92,7 @@ async function handleCommand(
       return true;
     }
 
+    // ── 스킵 처리 ──
     case "!skip": {
       const id = parseInt(args[0]);
       if (isNaN(id)) {
@@ -79,6 +104,7 @@ async function handleCommand(
       return true;
     }
 
+    // ── 차단 큐 현황 ──
     case "!status": {
       const stat = await getCollectStatus();
       await channel.send(
@@ -110,7 +136,7 @@ client.on("messageCreate", async (message: Message) => {
   const raw = message.content.replace(/<@!?\d+>/g, "").trim();
   if (!raw) return;
 
-  // 명령어 처리 (!list, !done, !skip, !status)
+  // 명령어 처리
   const [command, ...args] = raw.split(/\s+/);
   if (command.startsWith("!")) {
     try {
