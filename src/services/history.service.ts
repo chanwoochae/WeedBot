@@ -48,3 +48,17 @@ export async function saveMessage(
     console.error("메시지 저장 실패:", error.message);
   }
 }
+
+export async function clearHistory(userId: string): Promise<number> {
+  const { count, error } = await getSupabase()
+    .from("secretary_messages")
+    .delete({ count: "exact" })
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("히스토리 삭제 실패:", error.message);
+    throw error;
+  }
+
+  return count ?? 0;
+}
