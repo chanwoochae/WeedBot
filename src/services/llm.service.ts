@@ -1,8 +1,9 @@
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "gemma4:31b";
-const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS ?? 600000);
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3-flash-preview";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+
+function getOllamaBaseUrl() { return process.env.OLLAMA_BASE_URL ?? "http://localhost:11434"; }
+function getOllamaModel() { return process.env.OLLAMA_MODEL ?? "gemma4:31b"; }
+function getOllamaTimeoutMs() { return Number(process.env.OLLAMA_TIMEOUT_MS ?? 600000); }
+function getGeminiModel() { return process.env.GEMINI_MODEL ?? "gemini-3-flash-preview"; }
 
 interface HistoryEntry {
   role: "user" | "assistant";
@@ -30,7 +31,7 @@ export async function chat(
   // 2차: Gemini 폴백
   try {
     const reply = await callGemini(userInput, history);
-    return { reply, model: GEMINI_MODEL };
+    return { reply, model: getGeminiModel() };
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);
     console.error(`❌ Gemini 실패: ${err}`);
@@ -47,17 +48,17 @@ export async function checkActiveModel(): Promise<{
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
+    const res = await fetch(`${getOllamaBaseUrl()}/api/tags`, {
       signal: controller.signal,
     });
     clearTimeout(timeout);
     if (res.ok) {
-      return { active: "ollama", modelName: OLLAMA_MODEL, ollamaOnline: true };
+      return { active: "ollama", modelName: getOllamaModel(), ollamaOnline: true };
     }
   } catch {
     // Ollama 오프라인
   }
-  return { active: "gemini", modelName: GEMINI_MODEL, ollamaOnline: false };
+  return { active: "gemini", modelName: getGeminiModel(), ollamaOnline: false };
 }
 
 async function callOllama(
@@ -71,13 +72,13 @@ async function callOllama(
   ];
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), getOllamaTimeoutMs());
 
   try {
-    const res = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+    const res = await fetch(`${getOllamaBaseUrl()}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: OLLAMA_MODEL, messages, stream: false }),
+      body: JSON.stringify({ model: getOllamaModel(), messages, stream: false }),
       signal: controller.signal,
     });
 
@@ -105,7 +106,7 @@ async function callGemini(
   ];
 
   const res = await fetch(
-    `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+    `${GEMINI_API_BASE}/${getGeminiModel()}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
