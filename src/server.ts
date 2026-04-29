@@ -7,7 +7,6 @@ import http from "http";
 import { processMarkup, MarkupRequest } from "./services/markup.service";
 
 const PORT = Number(process.env.WEEDBOT_HTTP_PORT ?? 3002);
-const API_KEY = process.env.PIPELINE_API_KEY ?? "";
 
 function send(res: http.ServerResponse, status: number, body: unknown) {
   const json = JSON.stringify(body);
@@ -28,9 +27,10 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 }
 
 function isAuthorized(req: http.IncomingMessage): boolean {
-  if (!API_KEY) return false;
+  const apiKey = process.env.PIPELINE_API_KEY ?? "";
+  if (!apiKey) return false;
   const auth = req.headers["authorization"] ?? "";
-  return auth === `Bearer ${API_KEY}`;
+  return auth === `Bearer ${apiKey}`;
 }
 
 export function startHttpServer() {
