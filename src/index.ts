@@ -8,6 +8,7 @@ import {
   markSkipped,
   getCollectStatus,
 } from "./services/blocked.service";
+import { triggerPipeline, triggerRetry, PipelineMode } from "./services/pipeline.service";
 
 dotenv.config();
 
@@ -113,6 +114,43 @@ async function handleCommand(
           `• 완료: ${stat.done}개\n` +
           `• 스킵: ${stat.skipped}개\n` +
           `• 오늘 감지: ${stat.todayBlocked}개`,
+      );
+      return true;
+    }
+
+    // ── Trendiv 파이프라인 제어 ──
+    case "!pipeline": {
+      const sub = args[0]?.toLowerCase();
+
+      if (sub === "run" || sub === "daily" || sub === "weekly") {
+        const mode: PipelineMode = sub === "weekly" ? "weekly" : "daily";
+        await channel.send(`🚀 파이프라인 시작 중... (mode: **${mode}**)`);
+        try {
+          const msg = await triggerPipeline(mode);
+          await channel.send(`✅ ${msg}`);
+        } catch (e) {
+          await channel.send(`❌ 파이프라인 시작 실패: ${(e as Error).message}`);
+        }
+        return true;
+      }
+
+      if (sub === "retry") {
+        await channel.send("🔄 실패 항목 재시도 중...");
+        try {
+          const msg = await triggerRetry();
+          await channel.send(`✅ ${msg}`);
+        } catch (e) {
+          await channel.send(`❌ 재시도 실패: ${(e as Error).message}`);
+        }
+        return true;
+      }
+
+      // 도움말
+      await channel.send(
+        "📋 **파이프라인 명령어**\n" +
+        "`!pipeline run` / `!pipeline daily` — 일간 파이프라인 실행 (X, YouTube)\n" +
+        "`!pipeline weekly` — 주간 파이프라인 실행 (전체 소스)\n" +
+        "`!pipeline retry` — 실패 항목 재시도"
       );
       return true;
     }
