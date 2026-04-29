@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits, Message } from "discord.js";
 import dotenv from "dotenv";
+import { startHttpServer } from "./server";
 import { chat, checkActiveModel } from "./services/llm.service";
 import { getHistory, saveMessage, clearHistory } from "./services/history.service";
 import {
@@ -219,3 +220,4 @@ client.on("messageCreate", async (message: Message) => {
 });
 
 client.login(process.env.DISCORD_BOT_TOKEN);
+startHttpServer();
