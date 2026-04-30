@@ -9,12 +9,17 @@ import { processMarkup, MarkupRequest } from "./services/markup.service";
 const PORT = Number(process.env.WEEDBOT_HTTP_PORT ?? 3002);
 
 function send(res: http.ServerResponse, status: number, body: unknown) {
-  const json = JSON.stringify(body);
-  res.writeHead(status, {
-    "Content-Type": "application/json",
-    "Content-Length": Buffer.byteLength(json),
-  });
-  res.end(json);
+  try {
+    if (res.writableEnded) return;
+    const json = JSON.stringify(body);
+    res.writeHead(status, {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(json),
+    });
+    res.end(json);
+  } catch (e) {
+    console.error("[HTTP] send() error:", (e as Error).message);
+  }
 }
 
 function readBody(req: http.IncomingMessage): Promise<string> {
@@ -27,15 +32,29 @@ function readBody(req: http.IncomingMessage): Promise<string> {
 }
 
 function isAuthorized(req: http.IncomingMessage): boolean {
-  const apiKey = process.env.PIPELINE_API_KEY ?? "";
-  if (!apiKey) return false;
+  const apiKey = (process.env.PIPELINE_API_KEY ?? "").trim();
+  if (!apiKey) {
+    console.error("[HTTP] PIPELINE_API_KEY 미설정");
+    return false;
+  }
   const auth = req.headers["authorization"] ?? "";
   return auth === `Bearer ${apiKey}`;
 }
 
 export function startHttpServer() {
+  // ── 프로세스 전역 에러 핸들러 ────────────────────────────
+  process.on("uncaughtException", (err) => {
+    console.error("[HTTP] uncaughtException:", err.message, err.stack);
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("[HTTP] unhandledRejection:", reason);
+  });
+
   const server = http.createServer(async (req, res) => {
     const url = req.url ?? "/";
+
+    // res 에러 이벤트 처리 (클라이언트 조기 연결 종료 등)
+    res.on("error", (e) => console.error("[HTTP] res error:", e.message));
 
     // ── Health check ──────────────────────────────────────
     if (req.method === "GET" && url === "/health") {
@@ -45,6 +64,7 @@ export function startHttpServer() {
     // ── Markup endpoint ───────────────────────────────────
     if (req.method === "POST" && url === "/api/markup") {
       if (!isAuthorized(req)) {
+        console.log(`[HTTP] 401 Unauthorized — auth: ${req.headers["authorization"]?.slice(0, 20) ?? "없음"}`);
         return send(res, 401, { error: "Unauthorized" });
       }
 
@@ -52,13 +72,15 @@ export function startHttpServer() {
       try {
         const raw = await readBody(req);
         body = JSON.parse(raw) as MarkupRequest;
-      } catch {
+      } catch (e) {
+        console.error("[HTTP] body parse error:", (e as Error).message);
         return send(res, 400, { error: "Invalid JSON" });
       }
 
       try {
         console.log(`[HTTP] /api/markup type=${body.type}`);
         const result = await processMarkup(body);
+        console.log(`[HTTP] /api/markup 완료 — markup len=${result.markup?.length ?? 0}`);
         return send(res, 200, result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
