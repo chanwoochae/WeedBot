@@ -49,6 +49,14 @@ export function startHttpServer() {
   process.on("unhandledRejection", (reason) => {
     console.error("[HTTP] unhandledRejection:", reason);
   });
+  process.on("SIGTERM", () => {
+    console.error("[HTTP] SIGTERM 수신 — pm2가 프로세스를 종료합니다");
+    process.exit(0);
+  });
+  process.on("SIGINT", () => {
+    console.error("[HTTP] SIGINT 수신");
+    process.exit(0);
+  });
 
   const server = http.createServer(async (req, res) => {
     const url = req.url ?? "/";

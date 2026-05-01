@@ -111,6 +111,7 @@ const MARKUP_RULES = `## 마크업 규칙
 <history>세션 요약 (3줄 이내)</history>`;
 
 export async function processMarkup(req: MarkupRequest): Promise<MarkupResponse> {
+  console.log("[Markup] processMarkup start, type:", req.type);
   let prompt: string;
 
   if (req.type === "init") {
@@ -142,7 +143,9 @@ ${req.currentHistory ? `\n이전 대화 요약:\n${req.currentHistory}` : ""}
 사용자 메시지: ${req.userMessage}`;
   }
 
+  console.log("[Markup] calling LLM, prompt len:", prompt.length);
   const raw = await callLLM(prompt);
+  console.log("[Markup] LLM 응답 수신, len:", raw.length);
 
   const markup  = extract(raw, "markup")  ?? (req.type === "conversation" ? "UNCHANGED" : raw);
   const spec    = extract(raw, "spec")    ?? undefined;
