@@ -5,6 +5,8 @@
  */
 import http from "http";
 import { processMarkup, MarkupRequest } from "./services/markup.service";
+import { verifyWebhookSignature } from "./services/github-app.service";
+import { handleIssueComment, IssueCommentPayload } from "./services/github-webhook.service";
 
 const PORT = Number(process.env.WEEDBOT_HTTP_PORT ?? 3002);
 
@@ -95,6 +97,25 @@ export function startHttpServer() {
         console.error("[HTTP] /api/markup error:", msg);
         return send(res, 500, { error: msg });
       }
+    }
+
+    // ── GitHub App 웹훅 ───────────────────────────────────
+    if (req.method === "POST" && url === "/webhook/github") {
+      const raw = await readBody(req);
+      const sig = (req.headers["x-hub-signature-256"] ?? "") as string;
+      if (!verifyWebhookSignature(raw, sig)) {
+        console.warn("[Webhook] 서명 검증 실패");
+        return send(res, 401, { error: "Invalid signature" });
+      }
+      const event = (req.headers["x-github-event"] ?? "") as string;
+      send(res, 200, { ok: true }); // GitHub에 즉시 200 응답
+      if (event === "issue_comment") {
+        const payload = JSON.parse(raw) as IssueCommentPayload;
+        handleIssueComment(payload).catch(e =>
+          console.error("[Webhook] handleIssueComment error:", (e as Error).message)
+        );
+      }
+      return;
     }
 
     // ── 404 ───────────────────────────────────────────────
