@@ -54,8 +54,8 @@ export function startHttpServer() {
     // process.exit()를 바로 호출하지 않음 → pm2 kill_timeout(300s) 동안 요청 완료 대기
   });
   process.on("SIGINT", () => {
-    console.log("[HTTP] SIGINT 수신");
-    process.exit(0);
+    console.log("[HTTP] SIGINT 수신 — 진행 중인 요청 완료 후 종료 예정");
+    // SIGKILL 전까지 진행 중인 요청 완료 대기
   });
 
   const server = http.createServer(async (req, res) => {
