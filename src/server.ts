@@ -50,11 +50,11 @@ export function startHttpServer() {
     console.error("[HTTP] unhandledRejection:", reason);
   });
   process.on("SIGTERM", () => {
-    console.error("[HTTP] SIGTERM 수신 — pm2가 프로세스를 종료합니다");
-    process.exit(0);
+    console.log("[HTTP] SIGTERM 수신 — 진행 중인 요청 완료 후 종료 예정");
+    // process.exit()를 바로 호출하지 않음 → pm2 kill_timeout(300s) 동안 요청 완료 대기
   });
   process.on("SIGINT", () => {
-    console.error("[HTTP] SIGINT 수신");
+    console.log("[HTTP] SIGINT 수신");
     process.exit(0);
   });
 
