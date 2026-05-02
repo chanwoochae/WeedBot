@@ -12,11 +12,11 @@ const GH_API = "https://api.github.com";
 
 // ─── Private Key 로드 ─────────────────────────────────────────────────────────
 function getPrivateKey(): string {
-  const path = process.env.GITHUB_APP_PRIVATE_KEY_PATH;
+  const path = process.env.WEEDBOT_APP_PRIVATE_KEY_PATH;
   if (path) return fs.readFileSync(path, "utf8");
-  const b64 = process.env.GITHUB_APP_PRIVATE_KEY_B64;
+  const b64 = process.env.WEEDBOT_APP_PRIVATE_KEY_B64;
   if (b64) return Buffer.from(b64, "base64").toString("utf8");
-  throw new Error("GitHub App private key 미설정 (GITHUB_APP_PRIVATE_KEY_PATH 또는 GITHUB_APP_PRIVATE_KEY_B64)");
+  throw new Error("GitHub App private key 미설정 (WEEDBOT_APP_PRIVATE_KEY_PATH 또는 WEEDBOT_APP_PRIVATE_KEY_B64)");
 }
 
 function base64url(data: Buffer | string): string {
@@ -26,8 +26,8 @@ function base64url(data: Buffer | string): string {
 
 // ─── App JWT 생성 (유효기간 10분) ─────────────────────────────────────────────
 export function generateAppJWT(): string {
-  const appId = process.env.GITHUB_APP_ID;
-  if (!appId) throw new Error("GITHUB_APP_ID 미설정");
+  const appId = process.env.WEEDBOT_APP_ID;
+  if (!appId) throw new Error("WEEDBOT_APP_ID 미설정");
   const privateKey = getPrivateKey();
   const now = Math.floor(Date.now() / 1000);
   const header  = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
@@ -56,7 +56,7 @@ export async function getInstallationToken(installationId: number): Promise<stri
 
 // ─── 웹훅 서명 검증 ───────────────────────────────────────────────────────────
 export function verifyWebhookSignature(rawBody: string, signature: string): boolean {
-  const secret = process.env.GITHUB_WEBHOOK_SECRET ?? "";
+  const secret = process.env.WEEDBOT_APP_WEBHOOK_SECRET ?? "";
   if (!secret || !signature?.startsWith("sha256=")) return false;
   const hmac = crypto.createHmac("sha256", secret);
   hmac.update(rawBody);
