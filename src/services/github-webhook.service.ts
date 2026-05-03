@@ -8,9 +8,10 @@ import { getInstallationToken, makeGhApi } from "./github-app.service";
 
 // ─── 봇 코멘트 식별자 ────────────────────────────────────────────────────────
 const MARKER = {
-  markup: "<!-- MARKUP_BOT:markup -->",
-  spec:   "<!-- MARKUP_BOT:spec -->",
-  thread: "<!-- MARKUP_BOT:thread -->",
+  markup:   "<!-- MARKUP_BOT:markup -->",
+  spec:     "<!-- MARKUP_BOT:spec -->",
+  thread:   "<!-- MARKUP_BOT:thread -->",
+  progress: "<!-- MARKUP_BOT:progress -->",
 };
 
 // ─── Figma URL 추출 (마크다운 링크 대응) ─────────────────────────────────────
@@ -131,6 +132,46 @@ async function upsertComment(
   }
 }
 
+// ─── 진행상황 알림 ────────────────────────────────────────────────────────────
+function buildProgressComment(steps: string[]) {
+  const stepsBlock = steps.length
+    ? `\n<details>\n<summary>진행 상황</summary>\n\n${steps.map(s => `- ${s}`).join("\n")}\n</details>`
+    : "";
+  return `${MARKER.progress}\n## ⏳ 마크업 생성 중...\n\n> 잠시만 기다려주세요.${stepsBlock}\n`;
+}
+
+function startProgressTimer(
+  api: ReturnType<typeof makeGhApi>,
+  commentId: number,
+  steps: string[],
+  intervalMs = 20_000,
+) {
+  const startedAt = Date.now();
+  const timer = setInterval(async () => {
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    try {
+      await api.updateComment(
+        commentId,
+        buildProgressComment([...steps, `🔄 AI 응답 대기 중... (${elapsed}초 경과)`]),
+      );
+    } catch { /* 코멘트 이미 삭제됐을 수 있음 */ }
+  }, intervalMs);
+  return {
+    addStep(step: string) { steps.push(step); },
+    stop() { clearInterval(timer); },
+  };
+}
+
+async function deleteProgressComment(
+  api: ReturnType<typeof makeGhApi>,
+  progressCommentId: number | null,
+) {
+  if (!progressCommentId) return;
+  try {
+    await api.deleteComment(progressCommentId);
+  } catch { /* 이미 삭제됐을 수 있음 */ }
+}
+
 // ─── 메인 핸들러 ─────────────────────────────────────────────────────────────
 export interface IssueCommentPayload {
   action: string;
@@ -163,11 +204,17 @@ export async function handleIssueComment(payload: IssueCommentPayload): Promise<
 
   const allComments = await api.getIssueComments(issueNumber);
   const botComments = {
-    markup: allComments.find(c => c.body.includes(MARKER.markup)),
-    spec:   allComments.find(c => c.body.includes(MARKER.spec)),
-    thread: allComments.find(c => c.body.includes(MARKER.thread)),
+    markup:   allComments.find(c => c.body.includes(MARKER.markup)),
+    spec:     allComments.find(c => c.body.includes(MARKER.spec)),
+    thread:   allComments.find(c => c.body.includes(MARKER.thread)),
+    progress: allComments.find(c => c.body.includes(MARKER.progress)),
   };
   const isInitialized = !!botComments.markup;
+
+  // 이전 진행상황 코멘트가 남아있으면 정리
+  if (botComments.progress) {
+    await deleteProgressComment(api, botComments.progress.id);
+  }
 
   if (!isMarkupCmd && !isInitialized) {
     console.log("[Webhook] /markup 명령 아님 + 세션 없음 — 스킵");
@@ -190,34 +237,72 @@ async function handleInit(
   triggerCommentId: number,
   body: string
 ) {
-  const figmaUrl = extractFigmaUrl(body);
-  const extraInstruction = body
-    .replace("/markup", "")
-    .replace(/\[.*?\]\(https?:\/\/(?:www\.)?figma\.com\/[^)]+\)/g, "")  // md 링크
-    .replace(/https?:\/\/(?:www\.)?figma\.com\/[^\s)\]>]+/g, "")        // plain 링크
-    .trim();
-  const figmaContext = await fetchFigmaContext(figmaUrl);
+  // 1. 즉시 진행상황 코멘트 생성
+  const steps: string[] = ["✅ 요청 접수"];
+  const progressRes = await api.createComment(issueNumber, buildProgressComment(steps)) as { id: number };
+  const progressId = progressRes.id;
+  const progress = startProgressTimer(api, progressId, steps);
 
-  console.log("[Webhook] handleInit — issueTitle:", issueTitle);
+  try {
+    // 2. Figma URL 추출 + 데이터 조회
+    const figmaUrl = extractFigmaUrl(body);
+    const extraInstruction = body
+      .replace("/markup", "")
+      .replace(/\[.*?\]\(https?:\/\/(?:www\.)?figma\.com\/[^)]+\)/g, "")  // md 링크
+      .replace(/https?:\/\/(?:www\.)?figma\.com\/[^\s)\]>]+/g, "")        // plain 링크
+      .trim();
 
-  const result = await processMarkup({
-    type: "init",
-    issueTitle,
-    figmaContext: figmaContext ?? null,
-    extraInstruction: extraInstruction || undefined,
-  });
+    if (figmaUrl) {
+      progress.addStep("🔄 Figma 데이터 조회 중...");
+      await api.updateComment(progressId, buildProgressComment(steps));
+    }
+    const figmaContext = await fetchFigmaContext(figmaUrl);
+    if (figmaUrl) {
+      steps[steps.length - 1] = figmaContext ? "✅ Figma 데이터 조회 완료" : "⚠️ Figma 데이터 조회 실패 (링크만 참고)";
+      await api.updateComment(progressId, buildProgressComment(steps));
+    }
 
-  const markup  = result.markup  ?? "마크업 생성 실패";
-  const spec    = result.spec    ?? "스펙 정리 중...";
-  const reply   = result.reply   ?? "마크업 초안을 작성했습니다.";
-  const history = result.history ?? "";
+    // 3. AI 모델 호출
+    progress.addStep("🔄 AI 모델 호출 중...");
+    await api.updateComment(progressId, buildProgressComment(steps));
 
-  await upsertComment(api, issueNumber, botComments.markup, buildMarkupComment(markup));
-  await upsertComment(api, issueNumber, botComments.spec,   buildSpecComment(spec));
-  await upsertComment(api, issueNumber, botComments.thread, buildThreadComment(reply, history));
-  await api.deleteComment(triggerCommentId);
+    console.log("[Webhook] handleInit — issueTitle:", issueTitle);
+    const result = await processMarkup({
+      type: "init",
+      issueTitle,
+      figmaContext: figmaContext ?? null,
+      extraInstruction: extraInstruction || undefined,
+    });
 
-  console.log("[Webhook] handleInit 완료");
+    progress.stop();
+    steps[steps.length - 1] = "✅ AI 응답 수신 완료";
+    progress.addStep("🔄 코멘트 작성 중...");
+    await api.updateComment(progressId, buildProgressComment(steps));
+
+    // 4. 결과 코멘트 생성/업데이트
+    const markup  = result.markup  ?? "마크업 생성 실패";
+    const spec    = result.spec    ?? "스펙 정리 중...";
+    const reply   = result.reply   ?? "마크업 초안을 작성했습니다.";
+    const history = result.history ?? "";
+
+    await upsertComment(api, issueNumber, botComments.markup, buildMarkupComment(markup));
+    await upsertComment(api, issueNumber, botComments.spec,   buildSpecComment(spec));
+    await upsertComment(api, issueNumber, botComments.thread, buildThreadComment(reply, history));
+
+    // 5. 진행상황 코멘트 + 유저 코멘트 삭제
+    await deleteProgressComment(api, progressId);
+    await api.deleteComment(triggerCommentId);
+
+    console.log("[Webhook] handleInit 완료");
+  } catch (e) {
+    progress.stop();
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[Webhook] handleInit 에러:", msg);
+    // 에러 시 진행상황 코멘트를 에러 메시지로 업데이트
+    try {
+      await api.updateComment(progressId, `${MARKER.progress}\n## ❌ 마크업 생성 실패\n\n\`\`\`\n${msg}\n\`\`\`\n`);
+    } catch { /* 코멘트 업데이트 실패 무시 */ }
+  }
 }
 
 // ─── 대화 이어가기 ────────────────────────────────────────────────────────────
@@ -228,27 +313,47 @@ async function handleConversation(
   triggerCommentId: number,
   userMessage: string
 ) {
-  const currentMarkup  = extractMarkdownCode(botComments.markup?.body ?? "");
-  const currentHistory = extractSummary(botComments.thread?.body ?? "");
+  // 1. 즉시 진행상황 코멘트 생성
+  const steps: string[] = ["✅ 메시지 접수", "🔄 AI 응답 대기 중..."];
+  const progressRes = await api.createComment(issueNumber, buildProgressComment(steps)) as { id: number };
+  const progressId = progressRes.id;
+  const progress = startProgressTimer(api, progressId, steps);
 
-  const result = await processMarkup({
-    type: "conversation",
-    currentMarkup,
-    currentHistory,
-    userMessage,
-  });
+  try {
+    const currentMarkup  = extractMarkdownCode(botComments.markup?.body ?? "");
+    const currentHistory = extractSummary(botComments.thread?.body ?? "");
 
-  const newMarkup = result.markup;
-  const reply     = result.reply   ?? userMessage;
-  const history   = result.history ?? currentHistory;
+    const result = await processMarkup({
+      type: "conversation",
+      currentMarkup,
+      currentHistory,
+      userMessage,
+    });
 
-  if (newMarkup && newMarkup !== "UNCHANGED" && botComments.markup) {
-    await api.updateComment(botComments.markup.id, buildMarkupComment(newMarkup));
+    progress.stop();
+
+    const newMarkup = result.markup;
+    const reply     = result.reply   ?? userMessage;
+    const history   = result.history ?? currentHistory;
+
+    if (newMarkup && newMarkup !== "UNCHANGED" && botComments.markup) {
+      await api.updateComment(botComments.markup.id, buildMarkupComment(newMarkup));
+    }
+    if (botComments.thread) {
+      await api.updateComment(botComments.thread.id, buildThreadComment(reply, history));
+    }
+
+    // 진행상황 코멘트 + 유저 코멘트 삭제
+    await deleteProgressComment(api, progressId);
+    await api.deleteComment(triggerCommentId);
+
+    console.log("[Webhook] handleConversation 완료");
+  } catch (e) {
+    progress.stop();
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[Webhook] handleConversation 에러:", msg);
+    try {
+      await api.updateComment(progressId, `${MARKER.progress}\n## ❌ 처리 실패\n\n\`\`\`\n${msg}\n\`\`\`\n`);
+    } catch { /* 무시 */ }
   }
-  if (botComments.thread) {
-    await api.updateComment(botComments.thread.id, buildThreadComment(reply, history));
-  }
-  await api.deleteComment(triggerCommentId);
-
-  console.log("[Webhook] handleConversation 완료");
 }
