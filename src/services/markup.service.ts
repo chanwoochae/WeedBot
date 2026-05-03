@@ -104,9 +104,33 @@ const MARKUP_RULES = `## 마크업 규칙
   | <TagList tags={tags} />                                 |
   | <PrimaryButton>원문 보기</PrimaryButton>                |
 
+## 스펙 작성 규칙 (중요!)
+- 이슈 제목에서 요청한 **대상 컴포넌트 1개**의 Props/Slots만 정의
+- 마크업에 보이는 하위 컴포넌트를 개별 행으로 분리하여 Props를 나열하지 말 것
+- 하위 컴포넌트는 마크업 구조도에서 이름만 보여주면 충분
+- Figma 데이터가 없으면 Props를 추측하지 말 것 — "Figma 링크 제공 시 상세 스펙 작성 가능" 표시
+- children은 \`children: Snippet\`으로 통일 (slot 금지)
+- 스펙 표 컬럼: 컴포넌트명 | Props/Slots | 설명
+- 불필요한 prop 남발 금지 — 실제 필요한 최소 인터페이스만
+
+## Svelte 5 컨벤션
+- Runes 문법: $state(), $derived(), $effect(), $props()
+- Props: interface Props 정의 필수, class?: string 포함
+- 이벤트: onclick, oninput (on:click 금지)
+- 렌더링: {@render children()} (slot 금지)
+- rest props: {...rest}로 루트 요소에 전달
+
+## Tailwind v4 색상 (주요 매핑)
+- Primary: bg-primary, text-primary (#1ba896)
+- Background: bg-bg-body, bg-bg-main, bg-bg-surface
+- Border: border-border-default, border-border-strong
+- Gray: text-gray-500 ~ text-gray-900
+- Status: bg-confirm, bg-caution, bg-alert, bg-info
+- 하드코딩 색상(#hex, rgb) 금지 → CSS 변수 클래스 사용
+
 ## 응답 형식 (반드시 XML 태그로 구분)
 <markup>ASCII 마크업</markup>
-<spec>컴포넌트 스펙 (마크다운 표)</spec>
+<spec>대상 컴포넌트의 스펙만 (마크다운 표)</spec>
 <reply>사용자에게 보내는 자연어 응답</reply>
 <history>세션 요약 (3줄 이내)</history>`;
 

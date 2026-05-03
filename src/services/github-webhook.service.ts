@@ -13,6 +13,16 @@ const MARKER = {
   thread: "<!-- MARKUP_BOT:thread -->",
 };
 
+// ─── Figma URL 추출 (마크다운 링크 대응) ─────────────────────────────────────
+function extractFigmaUrl(text: string): string | null {
+  // 1) 마크다운 링크 [text](url) 내부 URL
+  const md = text.match(/\[.*?\]\((https?:\/\/(?:www\.)?figma\.com\/[^)]+)\)/);
+  if (md) return md[1];
+  // 2) 순수 URL (], ), > 등으로 안 끊기게)
+  const plain = text.match(/https?:\/\/(?:www\.)?figma\.com\/[^\s)\]>]+/);
+  return plain?.[0] ?? null;
+}
+
 // ─── Figma API ───────────────────────────────────────────────────────────────
 function parseFigmaUrl(url: string) {
   const fileMatch = url.match(/figma\.com\/(?:design|file)\/([a-zA-Z0-9]+)/);
@@ -180,9 +190,12 @@ async function handleInit(
   triggerCommentId: number,
   body: string
 ) {
-  const figmaUrlMatch = body.match(/https?:\/\/(?:www\.)?figma\.com\/\S+/);
-  const figmaUrl = figmaUrlMatch?.[0] ?? null;
-  const extraInstruction = body.replace("/markup", "").replace(figmaUrl ?? "", "").trim();
+  const figmaUrl = extractFigmaUrl(body);
+  const extraInstruction = body
+    .replace("/markup", "")
+    .replace(/\[.*?\]\(https?:\/\/(?:www\.)?figma\.com\/[^)]+\)/g, "")  // md 링크
+    .replace(/https?:\/\/(?:www\.)?figma\.com\/[^\s)\]>]+/g, "")        // plain 링크
+    .trim();
   const figmaContext = await fetchFigmaContext(figmaUrl);
 
   console.log("[Webhook] handleInit — issueTitle:", issueTitle);
