@@ -95,7 +95,10 @@ async function callLLM(prompt: string): Promise<string> {
 const MARKUP_RULES = `## 마크업 규칙
 - ASCII 박스 레이아웃으로 컴포넌트 구조 표현
 - Svelte 컴포넌트명 사용 (<ScoreBadge />, <ArticleCard />, <TagChip /> 등)
+- **메인 컴포넌트** 전체 구조를 먼저 그린 뒤, **하위 컴포넌트**는 아래에 각각 개별 ASCII 다이어그램으로 그려줄 것
 - 예시:
+
+### ArticleCard (메인)
   | <DragHandle />                                           |
   | <ScoreBadge score={9} />  <SourceInfo />  <Bookmark />  |
   |----------------------------------------------------------|
@@ -104,10 +107,18 @@ const MARKUP_RULES = `## 마크업 규칙
   | <TagList tags={tags} />                                 |
   | <PrimaryButton>원문 보기</PrimaryButton>                |
 
-## 스펙 작성 규칙 (중요!)
-- 이슈 제목에서 요청한 **대상 컴포넌트 1개**의 Props/Slots만 정의
-- 마크업에 보이는 하위 컴포넌트를 개별 행으로 분리하여 Props를 나열하지 말 것
-- 하위 컴포넌트는 마크업 구조도에서 이름만 보여주면 충분
+### ScoreBadge
+  ┌──────────────┐
+  │ <Icon />  9  │
+  └──────────────┘
+
+### TagList
+  ┌─────────────────────────────────┐
+  │ <TagChip />  <TagChip />  ...  │
+  └─────────────────────────────────┘
+
+## 스펙 작성 규칙
+- 메인 컴포넌트 + 하위 컴포넌트 모두 스펙 표에 포함 가능
 - Figma 데이터가 없으면 Props를 추측하지 말 것 — "Figma 링크 제공 시 상세 스펙 작성 가능" 표시
 - children은 \`children: Snippet\`으로 통일 (slot 금지)
 - 스펙 표 컬럼: 컴포넌트명 | Props/Slots | 설명
