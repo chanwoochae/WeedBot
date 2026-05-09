@@ -21,11 +21,14 @@ jobs:
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
+            set -e
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            LOGFILE=~/WeedBot/deploy.log
+            echo "===== $(date '+%Y-%m-%d %H:%M:%S') 배포 시작 =====" >> $LOGFILE
             cd ~/WeedBot
-            git pull origin master
-            pnpm install --frozen-lockfile
-            pnpm build
-            pm2 startOrReload ecosystem.config.cjs --update-env
-            echo "✅ WeedBot 배포 완료"
+            git pull origin master 2>&1 | tee -a $LOGFILE
+            pnpm install --frozen-lockfile 2>&1 | tee -a $LOGFILE
+            pnpm build 2>&1 | tee -a $LOGFILE
+            pm2 startOrReload ecosystem.config.cjs --update-env 2>&1 | tee -a $LOGFILE
+            echo "✅ $(date '+%Y-%m-%d %H:%M:%S') 배포 완료" | tee -a $LOGFILE
