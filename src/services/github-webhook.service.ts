@@ -202,12 +202,19 @@ export async function handleIssueComment(payload: IssueCommentPayload): Promise<
   const token = await getInstallationToken(installation.id);
   const api   = makeGhApi(token, owner, repo);
 
+  // /markup 명령이면 즉시 진행상황 코멘트 생성 (API 조회 전)
+  let earlyProgressId: number | null = null;
+  if (isMarkupCmd) {
+    const res = await api.createComment(issueNumber, buildProgressComment(["✅ 요청 접수"])) as { id: number };
+    earlyProgressId = res.id;
+  }
+
   const allComments = await api.getIssueComments(issueNumber);
   const botComments = {
     markup:   allComments.find(c => c.body.includes(MARKER.markup)),
     spec:     allComments.find(c => c.body.includes(MARKER.spec)),
     thread:   allComments.find(c => c.body.includes(MARKER.thread)),
-    progress: allComments.find(c => c.body.includes(MARKER.progress)),
+    progress: allComments.find(c => c.body.includes(MARKER.progress) && c.id !== earlyProgressId),
   };
   const isInitialized = !!botComments.markup;
 
@@ -222,7 +229,7 @@ export async function handleIssueComment(payload: IssueCommentPayload): Promise<
   }
 
   if (isMarkupCmd) {
-    await handleInit(api, botComments, issueNumber, issue.title, comment.id, commentBody);
+    await handleInit(api, botComments, issueNumber, issue.title, comment.id, commentBody, earlyProgressId);
   } else {
     await handleConversation(api, botComments, issueNumber, comment.id, commentBody);
   }
@@ -235,12 +242,18 @@ async function handleInit(
   issueNumber: number,
   issueTitle: string,
   triggerCommentId: number,
-  body: string
+  body: string,
+  earlyProgressId: number | null = null,
 ) {
-  // 1. 즉시 진행상황 코멘트 생성
+  // 1. 진행상황 코멘트 (이미 생성된 경우 재활용)
   const steps: string[] = ["✅ 요청 접수"];
-  const progressRes = await api.createComment(issueNumber, buildProgressComment(steps)) as { id: number };
-  const progressId = progressRes.id;
+  let progressId: number;
+  if (earlyProgressId) {
+    progressId = earlyProgressId;
+  } else {
+    const progressRes = await api.createComment(issueNumber, buildProgressComment(steps)) as { id: number };
+    progressId = progressRes.id;
+  }
   const progress = startProgressTimer(api, progressId, steps);
 
   try {

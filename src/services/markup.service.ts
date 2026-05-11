@@ -79,15 +79,29 @@ async function callGemini(prompt: string): Promise<string> {
   return data.candidates[0].content.parts[0].text;
 }
 
+async function notifyDiscord(message: string) {
+  const url = process.env.DISCORD_WEBHOOK_URL;
+  if (!url) return;
+  await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: message }),
+  }).catch(e => console.warn("[Discord] 알림 실패:", (e as Error).message));
+}
+
 async function callLLM(prompt: string): Promise<string> {
   try {
+    await notifyDiscord(`🤖 **LLM 처리 시작** — \`${getOllamaModel()}\` (Ollama)`);
     const result = await callOllama(prompt);
     console.log("[Markup] LLM: Ollama");
+    await notifyDiscord(`✅ **LLM 응답 완료** — Ollama (${result.length}자)`);
     return result;
   } catch (e) {
     console.warn("[Markup] Ollama 실패, Gemini 폴백:", (e as Error).message);
+    await notifyDiscord(`⚠️ **Ollama 실패**, Gemini 폴백 — ${(e as Error).message}`);
     const result = await callGemini(prompt);
     console.log("[Markup] LLM: Gemini");
+    await notifyDiscord(`✅ **LLM 응답 완료** — Gemini (${result.length}자)`);
     return result;
   }
 }
