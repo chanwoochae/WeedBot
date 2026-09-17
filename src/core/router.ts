@@ -59,7 +59,7 @@ export async function dispatch(
   const module = modules.get(name);
   if (module) {
     const [sub, ...rest] = args;
-    const cmd = sub ? module.commands[sub] : undefined;
+    const cmd = sub ? module.commands[sub.toLowerCase()] : undefined;
     if (!cmd) {
       await ctx.channel.send(buildModuleHelpText(module));
       return true;
