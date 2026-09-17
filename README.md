@@ -62,7 +62,9 @@ pm2 logs weedbot --lines 20
 
 ## 환경변수
 
-`/home/opc/.env.shared` (WeedBot + trendiv 공유 심링크)
+**Oracle**: `/home/opc/.env.shared` (WeedBot + trendiv 공유 심링크)
+
+**맥북(로컬)**: `~/project/.env.shared` → `WeedBot/.env`, `weed-console/.env.local`로 각각 심링크(2026-09-18 설정). 맥북에서 로컬로 여러 앱 띄울 때 값 하나만 관리하면 되고, Oracle의 `.env.shared`와는 별개 파일 — 값은 손으로 맞춰야 함(자동 동기화 없음). `PIPELINE_API_KEY`/`WEEDBOT_API_KEY`는 로컬 테스트 전용으로 새로 생성한 값.
 
 ```env
 SUPABASE_URL=
