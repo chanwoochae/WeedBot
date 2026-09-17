@@ -143,6 +143,26 @@ export function startHttpServer() {
       }
     }
 
+    if (req.method === "GET" && url.split("?")[0] === "/api/chat/history") {
+      if (!isAuthorized(req)) {
+        return send(res, 401, { error: "Unauthorized" });
+      }
+
+      try {
+        const userId = new URL(url, "http://localhost").searchParams.get("userId")?.trim();
+        if (!userId) {
+          return send(res, 400, { error: "userId is required" });
+        }
+
+        const messages = await getHistory(userId);
+        return send(res, 200, { messages });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[HTTP] /api/chat/history error:", msg);
+        return send(res, 500, { error: msg });
+      }
+    }
+
     if (req.method === "GET" && url === "/api/chat/model") {
       if (!isAuthorized(req)) {
         return send(res, 401, { error: "Unauthorized" });

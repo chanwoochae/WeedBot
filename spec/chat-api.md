@@ -7,7 +7,7 @@ Discord 전용이던 대화 로직(Ollama→Gemini 폴백, 대화 히스토리)�
 - `POST /api/chat/message` — body `{ userId, message }` → `{ reply, model }`. 히스토리 조회 → 답변 생성 → user/assistant 메시지 저장.
 - `POST /api/chat/clear` — body `{ userId }` → `{ deleted }`. 히스토리 삭제.
 - `GET /api/chat/model` — → `checkActiveModel()` 결과 그대로. 현재 활성 모델(Ollama/Gemini) 상태.
-- (M2.0에서 추가 예정) `GET /api/chat/history?userId=` — 이전 대화 조회.
+- `GET /api/chat/history?userId=` — → `{ messages }`. 이전 대화 조회 (M2.0, 개인 웹앱이 페이지 로드 시 사용).
 
 ## 인증
 `Authorization: Bearer <PIPELINE_API_KEY>` — 기존 `/api/markup`과 동일한 공유 키.
@@ -29,3 +29,4 @@ Discord 전용이던 대화 로직(Ollama→Gemini 폴백, 대화 히스토리)�
 ## 변경 이력
 - 2026-09-17: 최초 구현 (PR #3, codex `gpt-6-astra`로 작성, Claude 리뷰)
 - 2026-09-18: `userId` trim 일관성 버그 수정 (코드리뷰로 발견)
+- 2026-09-18: `GET /api/chat/history` 추가 (M2.0, codex `gpt-6-astra`로 작성)
