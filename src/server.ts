@@ -119,10 +119,11 @@ export function startHttpServer() {
       if (typeof body?.userId !== "string" || !body.userId.trim()) {
         return send(res, 400, { error: "userId must be a non-empty string" });
       }
+      const userId = body.userId.trim();
 
       try {
         if (url === "/api/chat/clear") {
-          const deleted = await clearHistory(body.userId);
+          const deleted = await clearHistory(userId);
           return send(res, 200, { deleted });
         }
 
@@ -130,10 +131,10 @@ export function startHttpServer() {
           return send(res, 400, { error: "message must be a non-empty string" });
         }
 
-        const history = await getHistory(body.userId);
+        const history = await getHistory(userId);
         const result = await chat(body.message, history);
-        await saveMessage(body.userId, "user", body.message);
-        await saveMessage(body.userId, "assistant", result.reply);
+        await saveMessage(userId, "user", body.message);
+        await saveMessage(userId, "assistant", result.reply);
         return send(res, 200, result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
