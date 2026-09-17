@@ -7,6 +7,8 @@ import http from "http";
 import { processMarkup, MarkupRequest } from "./services/markup.service";
 import { verifyWebhookSignature } from "./services/github-app.service";
 import { handleIssueComment, IssueCommentPayload } from "./services/github-webhook.service";
+import { chat, checkActiveModel } from "./services/llm.service";
+import { getHistory, saveMessage, clearHistory } from "./services/history.service";
 
 const PORT = Number(process.env.WEEDBOT_HTTP_PORT ?? 3002);
 
@@ -95,6 +97,83 @@ export function startHttpServer() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[HTTP] /api/markup error:", msg);
+        return send(res, 500, { error: msg });
+      }
+    }
+
+    // ── Chat endpoints ────────────────────────────────────
+    if (req.method === "POST" && (url === "/api/chat/message" || url === "/api/chat/clear")) {
+      if (!isAuthorized(req)) {
+        return send(res, 401, { error: "Unauthorized" });
+      }
+
+      let body: { userId?: unknown; message?: unknown } | null;
+      try {
+        const raw = await readBody(req);
+        body = JSON.parse(raw);
+      } catch (e) {
+        console.error("[HTTP] body parse error:", (e as Error).message);
+        return send(res, 400, { error: "Invalid JSON" });
+      }
+
+      if (typeof body?.userId !== "string" || !body.userId.trim()) {
+        return send(res, 400, { error: "userId must be a non-empty string" });
+      }
+      const userId = body.userId.trim();
+
+      try {
+        if (url === "/api/chat/clear") {
+          const deleted = await clearHistory(userId);
+          return send(res, 200, { deleted });
+        }
+
+        if (typeof body.message !== "string" || !body.message.trim()) {
+          return send(res, 400, { error: "message must be a non-empty string" });
+        }
+
+        const history = await getHistory(userId);
+        const result = await chat(body.message, history);
+        await saveMessage(userId, "user", body.message);
+        await saveMessage(userId, "assistant", result.reply);
+        return send(res, 200, result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[HTTP] ${url} error:`, msg);
+        return send(res, 500, { error: msg });
+      }
+    }
+
+    if (req.method === "GET" && url.split("?")[0] === "/api/chat/history") {
+      if (!isAuthorized(req)) {
+        return send(res, 401, { error: "Unauthorized" });
+      }
+
+      try {
+        const userId = new URL(url, "http://localhost").searchParams.get("userId")?.trim();
+        if (!userId) {
+          return send(res, 400, { error: "userId is required" });
+        }
+
+        const messages = await getHistory(userId);
+        return send(res, 200, { messages });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[HTTP] /api/chat/history error:", msg);
+        return send(res, 500, { error: msg });
+      }
+    }
+
+    if (req.method === "GET" && url === "/api/chat/model") {
+      if (!isAuthorized(req)) {
+        return send(res, 401, { error: "Unauthorized" });
+      }
+
+      try {
+        const result = await checkActiveModel();
+        return send(res, 200, result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("[HTTP] /api/chat/model error:", msg);
         return send(res, 500, { error: msg });
       }
     }
