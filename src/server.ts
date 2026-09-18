@@ -7,7 +7,8 @@ import http from "http";
 import { processMarkup, MarkupRequest } from "./services/markup.service";
 import { verifyWebhookSignature } from "./services/github-app.service";
 import { handleIssueComment, IssueCommentPayload } from "./services/github-webhook.service";
-import { chat, checkActiveModel } from "./services/llm.service";
+import { chat, chatStream, checkActiveModel } from "./services/llm.service";
+import { refineWithAgy } from "./services/refine.service";
 import { getHistory, saveMessage, clearHistory } from "./services/history.service";
 
 const PORT = Number(process.env.WEEDBOT_HTTP_PORT ?? 3002);
@@ -99,6 +100,67 @@ export function startHttpServer() {
         console.error("[HTTP] /api/markup error:", msg);
         return send(res, 500, { error: msg });
       }
+    }
+
+    // ── Streaming chat endpoint ───────────────────────────
+    if (req.method === "POST" && url === "/api/chat/message/stream") {
+      if (!isAuthorized(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: "Unauthorized" }));
+      }
+
+      let body: { userId?: unknown; message?: unknown; mode?: unknown } | null;
+      try {
+        const raw = await readBody(req);
+        body = JSON.parse(raw);
+      } catch (e) {
+        console.error("[HTTP] body parse error:", (e as Error).message);
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: "Invalid JSON" }));
+      }
+
+      if (typeof body?.userId !== "string" || !body.userId.trim()) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: "userId must be a non-empty string" }));
+      }
+      const userId = body.userId.trim();
+
+      if (typeof body.message !== "string" || !body.message.trim()) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: "message must be a non-empty string" }));
+      }
+      if (body.mode !== undefined && body.mode !== "fast" && body.mode !== "refine") {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: "mode must be fast or refine" }));
+      }
+      const message = body.message;
+      const mode = body.mode ?? "refine";
+
+      res.writeHead(200, {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-store",
+      });
+      try {
+        const history = await getHistory(userId);
+        const result = await chatStream(message, history, (chunkText) => {
+          res.write(JSON.stringify({ type: "chunk", text: chunkText }) + "\n");
+        });
+        let finalReply = result.reply;
+        if (mode === "refine") {
+          res.write(JSON.stringify({ type: "refining" }) + "\n");
+          finalReply = await refineWithAgy(result.reply);
+        }
+        await saveMessage(userId, "user", message);
+        await saveMessage(userId, "assistant", finalReply);
+        res.write(JSON.stringify({ type: "done", reply: finalReply, model: result.model }) + "\n");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[HTTP] ${url} error:`, msg);
+        res.write(JSON.stringify({ type: "error", error: msg }) + "\n");
+      } finally {
+        res.end();
+      }
+      return;
     }
 
     // ── Chat endpoints ────────────────────────────────────
