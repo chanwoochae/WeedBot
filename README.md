@@ -68,7 +68,13 @@ pm2 logs weedbot --lines 20
 
 ⚠️ **`OLLAMA_MODEL`을 `qwen3.6:27b`(dense, 27B)로 두지 말 것** — 이름이 비슷한 `qwen3.6:35b-a3b`(MoE)와 다른 모델. `27b`는 기본 reasoning_effort가 "xhigh"라 "5만 답해줘" 같은 간단한 질문에도 몇 분~최대 20분씩 내부 사고(thinking)를 하느라 응답이 극도로 느려짐(Ollama는 reasoning_effort 조절 옵션 노출 안 함).
 
-현재 로컬 기본값(2026-09-18): **`OLLAMA_MODEL=oamazonasgabriel/qwen3.6-35b-a3b:q4-24gbGPU`** — 공식 `qwen3.6:35b-a3b`(Q4_K_M, 24GB, GPU 10%/CPU 90%로 밀려 51초)보다 가볍게 양자화된 커뮤니티 빌드(IQ4_XS, 19GB). **100% GPU로 온전히 올라가고 실전 질문 기준 약 4초**로 압도적으로 빠름. `gemma4:26b`(~48초)도 대안으로 동작 확인됨.
+현재 로컬 기본값(2026-09-18): **`OLLAMA_MODEL=qwen3.6-35b-a3b-unsloth`** — Unsloth의 "Dynamic 2.0"(실사용 데이터셋으로 보정, 중요 레이어는 정밀도 유지) 양자화 빌드(`unsloth/Qwen3.6-35B-A3B-GGUF`의 `UD-Q3_K_XL.gguf`, 16GB)를 로컬 파일에서 `ollama create qwen3.6-35b-a3b-unsloth -f Modelfile`로 등록해 사용. **100% GPU, 토큰당 속도 ~26 tok/s.**
+
+이전에 검토했던 대안들(참고용):
+- 공식 `qwen3.6:35b-a3b`(Q4_K_M, 24GB) — GPU 한도(21.3GB) 초과로 10%가 CPU로 밀려 3배 느림. 비추천.
+- 커뮤니티 빌드 `oamazonasgabriel/qwen3.6-35b-a3b:q4-24gbGPU`(IQ4_XS, 19GB) — 속도는 Unsloth판과 동급(~28.7 tok/s)이지만 용량이 더 크고 익명 개인 업로드라 출처 신뢰도가 낮음. `ollama rm`으로 지워도 무방.
+- `gemma4:26b`(~48초, MoE) — 대안으로 동작 확인됨.
+- 자체 imatrix 양자화 시도 — **하드웨어 한계로 불가능** 판명(원본 71GB가 32GB 램에 안 맞아 CPU 연산 시 253시간 소요 추정). 필요시 `spec/chat-api.md`나 세션 기록 참조.
 
 ⚠️ 이 맥북(M1 Pro 32GB)은 Metal GPU가 실사용 가능한 메모리가 시스템 전체 32GB가 아니라 **~21.3GiB로 제한**돼있음(Ollama 로그의 `gpu memory ... total="21.3 GiB"`로 확인). 이 한도를 넘는 모델은 일부가 CPU로 밀려 급격히 느려짐 — 새 모델 시도 시 `ollama ps`의 `PROCESSOR` 컬럼이 `100% GPU`인지 꼭 확인할 것.
 
