@@ -1,4 +1,5 @@
-import { registerCoreCommand, buildHelpText } from "./router";
+import { registerCoreCommand, buildHelpLines } from "./router";
+import { sendChunked } from "./discord.util";
 import { checkActiveModel } from "../services/llm.service";
 import { clearHistory } from "../services/history.service";
 
@@ -8,7 +9,7 @@ export function registerCoreCommands(): void {
   registerCoreCommand("help", {
     description: "사용 가능한 명령어 목록을 보여줘요.",
     handler: async (ctx) => {
-      await ctx.channel.send(buildHelpText());
+      await sendChunked(ctx.channel, buildHelpLines());
     },
   });
 
