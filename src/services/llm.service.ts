@@ -3,6 +3,7 @@ const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models
 function getOllamaBaseUrl() { return process.env.OLLAMA_BASE_URL ?? "http://localhost:11434"; }
 function getOllamaModel() { return process.env.OLLAMA_MODEL ?? "gemma4:31b"; }
 function getOllamaTimeoutMs() { return Number(process.env.OLLAMA_TIMEOUT_MS ?? 600000); }
+function getOllamaStreamIdleTimeoutMs() { return Number(process.env.OLLAMA_STREAM_IDLE_TIMEOUT_MS ?? 90000); }
 function getGeminiModel() { return process.env.GEMINI_MODEL ?? "gemini-3-flash-preview"; }
 
 interface HistoryEntry {
@@ -13,6 +14,14 @@ interface HistoryEntry {
 interface ChatResult {
   reply: string;
   model: "ollama" | string;
+}
+
+function buildMessages(userInput: string, history: HistoryEntry[]) {
+  return [
+    { role: "system", content: "너는 CCW의 개인 AI 비서야. 한국어로 친근하게 대화해." },
+    ...history.map((h) => ({ role: h.role, content: h.content })),
+    { role: "user", content: userInput },
+  ];
 }
 
 export async function chat(
@@ -42,30 +51,29 @@ export async function chat(
 export async function chatStream(
   userInput: string,
   history: HistoryEntry[],
-  onChunk: (text: string) => void,
+  onChunk: (text: string, opts?: { reset?: boolean }) => void,
 ): Promise<ChatResult> {
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const resetTimeout = () => {
     clearTimeout(timeout);
-    timeout = setTimeout(() => controller.abort(), 90_000);
+    timeout = setTimeout(() => controller.abort(), getOllamaStreamIdleTimeoutMs());
   };
 
   try {
     // 첫 응답 대기에도 적용하고, 이후에는 수신 청크마다 갱신한다.
     resetTimeout();
-    const messages = [
-      { role: "system", content: "너는 CCW의 개인 AI 비서야. 한국어로 친근하게 대화해." },
-      ...history.map((h) => ({ role: h.role, content: h.content })),
-      { role: "user", content: userInput },
-    ];
+    const messages = buildMessages(userInput, history);
     const res = await fetch(`${getOllamaBaseUrl()}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: getOllamaModel(), messages, stream: true }),
       signal: controller.signal,
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      throw new Error(`HTTP ${res.status}`);
+    }
     if (!res.body) throw new Error("Ollama 스트림 본문 없음");
 
     const reader = res.body.getReader();
@@ -117,7 +125,8 @@ export async function chatStream(
 
   try {
     const reply = await callGemini(userInput, history);
-    onChunk(reply);
+    // 폴백 답변은 이미 전달한 Ollama 청크를 대체한다.
+    onChunk(reply, { reset: true });
     return { reply, model: getGeminiModel() };
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);
@@ -152,11 +161,7 @@ async function callOllama(
   userInput: string,
   history: HistoryEntry[],
 ): Promise<string> {
-  const messages = [
-    { role: "system", content: "너는 CCW의 개인 AI 비서야. 한국어로 친근하게 대화해." },
-    ...history.map((h) => ({ role: h.role, content: h.content })),
-    { role: "user", content: userInput },
-  ];
+  const messages = buildMessages(userInput, history);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), getOllamaTimeoutMs());

@@ -103,7 +103,7 @@ export function startHttpServer() {
     }
 
     // ── Streaming chat endpoint ───────────────────────────
-    if (req.method === "POST" && url === "/api/chat/message/stream") {
+    if (req.method === "POST" && url.split("?")[0] === "/api/chat/message/stream") {
       if (!isAuthorized(req)) {
         res.writeHead(401, { "Content-Type": "application/json" });
         return res.end(JSON.stringify({ error: "Unauthorized" }));
@@ -142,8 +142,8 @@ export function startHttpServer() {
       });
       try {
         const history = await getHistory(userId);
-        const result = await chatStream(message, history, (chunkText) => {
-          res.write(JSON.stringify({ type: "chunk", text: chunkText }) + "\n");
+        const result = await chatStream(message, history, (chunkText, opts) => {
+          res.write(JSON.stringify({ type: "chunk", text: chunkText, ...(opts?.reset ? { reset: true } : {}) }) + "\n");
         });
         let finalReply = result.reply;
         if (mode === "refine") {
