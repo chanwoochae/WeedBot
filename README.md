@@ -66,7 +66,11 @@ pm2 logs weedbot --lines 20
 
 **맥북(로컬)**: `~/project/.env.shared` → `WeedBot/.env`, `weed-console/.env.local`로 각각 심링크(2026-09-18 설정). 맥북에서 로컬로 여러 앱 띄울 때 값 하나만 관리하면 되고, Oracle의 `.env.shared`와는 별개 파일 — 값은 손으로 맞춰야 함(자동 동기화 없음). `PIPELINE_API_KEY`/`WEEDBOT_API_KEY`는 로컬 테스트 전용으로 새로 생성한 값.
 
-⚠️ **`OLLAMA_MODEL`을 `qwen3.6:27b`로 두지 말 것** — 이 모델은 기본 reasoning_effort가 "xhigh"라 "5만 답해줘" 같은 간단한 질문에도 몇 분~최대 20분씩 내부 사고(thinking)를 하느라 응답이 극도로 느려짐(Ollama는 reasoning_effort 조절 옵션 노출 안 함). 로컬엔 `gemma4:26b`로 전환(2026-09-18) — 동일 조건에서 약 20초 응답. 더 빠르면서 똑똑한 대안으로 `Qwen3.6 35B-A3B`(MoE, 활성 파라미터 3B라 8B급 속도) 후보 있음, 아직 미검증.
+⚠️ **`OLLAMA_MODEL`을 `qwen3.6:27b`(dense, 27B)로 두지 말 것** — 이름이 비슷한 `qwen3.6:35b-a3b`(MoE)와 다른 모델. `27b`는 기본 reasoning_effort가 "xhigh"라 "5만 답해줘" 같은 간단한 질문에도 몇 분~최대 20분씩 내부 사고(thinking)를 하느라 응답이 극도로 느려짐(Ollama는 reasoning_effort 조절 옵션 노출 안 함).
+
+현재 로컬 기본값(2026-09-18): **`OLLAMA_MODEL=qwen3.6:35b-a3b`** (MoE, ~24GB, 실전 질문 기준 약 51초, gemma4:26b와 속도 비슷하며 품질 약간 우위). `gemma4:26b`도 대안으로 동작 확인됨(~48초).
+
+⚠️ **이 맥북엔 한때 Ollama가 두 벌(Homebrew + 네이티브 Ollama.app) 설치돼 포트(11434)를 두고 충돌**한 적 있음(2026-09-18) — 응답이 비거나 먹통이면 `launchctl list | grep -i ollama`와 `lsof -i :11434`로 중복 실행부터 의심할 것. 네이티브 앱은 종료 및 `launchctl bootout`으로 자동실행 해제, Homebrew(`brew services`)만 사용 중.
 
 ```env
 SUPABASE_URL=
