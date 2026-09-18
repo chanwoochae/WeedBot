@@ -24,7 +24,8 @@ Discord 전용이던 대화 로직(Ollama→Gemini 폴백, 대화 히스토리)�
 - **절대 금지**: trendiv처럼 불특정 다수가 접근하는 공개 서비스가 이 API·이 키·이 저장소(`secretary_messages`)를 그대로 재사용하는 것. 공개 서비스는 별도 identity(익명 세션 또는 자체 계정) + 별도 저장소 + 별도 rate limit + Gemini 폴백 없이 Ollama만 사용해야 한다.
 
 ## 알려진 제약
-- `POST /api/chat/message`(비스트리밍)는 Ollama 타임아웃(기본 10분, `OLLAMA_TIMEOUT_MS`)이 그대로 응답 시간이 된다. `POST /api/chat/message/stream`은 이 문제를 해결하려고 만든 것 — 전체 타임아웃 대신 청크 수신마다 갱신되는 90초 무응답 감지(`chatStream`)를 씀. weed-console은 스트리밍 엔드포인트를 쓰고, 비스트리밍 `/api/chat/message`는 다른 재사용 목적(다른 앱이 스트리밍 없이 붙일 때)으로 남겨둠.
+- `POST /api/chat/message`(비스트리밍)는 Ollama 타임아웃(기본 10분, `OLLAMA_TIMEOUT_MS`)이 그대로 응답 시간이 된다. `POST /api/chat/message/stream`은 이 문제를 해결하려고 만든 것 — 전체 타임아웃 대신 청크 수신마다 갱신되는 무응답 감지(`chatStream`, 기본 90초, `OLLAMA_STREAM_IDLE_TIMEOUT_MS`로 조정 가능)를 씀. weed-console은 스트리밍 엔드포인트를 쓰고, 비스트리밍 `/api/chat/message`는 다른 재사용 목적(다른 앱이 스트리밍 없이 붙일 때)으로 남겨둠.
+- `refineWithAgy`가 답변 전체를 `agy -p`의 명령줄 인자로 넘긴다 — 답변이 아주 길면(멀티 KB~MB급) OS의 argv 길이 한도를 넘어 실패할 수 있음(현재는 실패 시 원본 그대로 반환하니 기능적으로 죽진 않지만 정제가 조용히 스킵됨). 개인 비서 채팅 답변 길이로는 발생 안 할 걸로 보이나, 나중에 아주 긴 응답을 다루게 되면 stdin으로 넘기는 방식으로 바꿔야 함.
 - `userId`는 호출 직후 `trim()`해서 정규화한다(2026-09-18 수정 — 이전엔 검증만 trim하고 조회는 원본을 써서 공백 섞인 요청이 다른 곳과 어긋난 히스토리 버킷을 만들 수 있었음).
 - `saveMessage` 두 번 호출이 순차 실행이라 약간의 지연이 있음 — **의도적으로 그대로 둠(2026-09-19 시도 후 되돌림)**: user 메시지 저장을 `chat()`과 `Promise.all`로 병렬화해봤더니, Ollama+Gemini 둘 다 실패하는 경우 user 메시지만 저장되고 assistant 응답 없이 고아 레코드가 남고, 재시도 시 중복까지 쌓이는 문제가 생김("user 메시지는 chat() 성공 후에만 저장한다"는 암묵적 불변식이 깨짐). 아끼는 시간(전체 응답 10초~수십초 중 수백 ms)에 비해 리스크가 커서 순차 실행 유지가 맞다고 판단.
 
