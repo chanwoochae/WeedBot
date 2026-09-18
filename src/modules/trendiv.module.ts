@@ -22,14 +22,16 @@ export const trendivModule: BotModule = {
           await ctx.channel.send("✅ 차단된 항목이 없어요.");
           return;
         }
-        const lines = items.map(
-          (item, i) =>
+        const lines = [
+          `📋 **차단 대기 목록 (${items.length}개)**`,
+          ...items.flatMap((item, i) => [
+            "",
             `**${i + 1}.** [ID: ${item.id}] ${item.title ?? "제목 없음"}\n` +
             `   🔗 ${item.link}\n` +
             `   ❌ ${item.block_reason ?? "알 수 없음"} | ${new Date(item.created_at).toLocaleString("ko-KR")}`,
-        );
-        const text = `📋 **차단 대기 목록 (${items.length}개)**\n\n${lines.join("\n\n")}`;
-        await sendChunked(ctx.channel, text, lines);
+          ]),
+        ];
+        await sendChunked(ctx.channel, lines);
       },
     },
 

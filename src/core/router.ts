@@ -1,5 +1,6 @@
 import { Message, SendableChannels } from "discord.js";
 import { BotModule, ModuleCommand } from "./types";
+import { sendChunked } from "./discord.util";
 
 // ─── 명령어 레지스트리 ─────────────────────────────────
 // 공용 명령어: !help, !clear, !model 처럼 네임스페이스 없이 바로 호출.
@@ -25,23 +26,18 @@ function moduleCommandLines(module: BotModule): string[] {
   );
 }
 
-export function buildHelpText(): string {
+export function buildHelpLines(): string[] {
   const lines: string[] = ["**공용 명령어**"];
   for (const [name, cmd] of Object.entries(coreCommands)) {
     lines.push(formatUsage(name, cmd));
   }
 
   for (const module of modules.values()) {
-    lines.push(`\n**${module.name}** — ${module.description}`);
+    lines.push("", `**${module.name}** — ${module.description}`);
     lines.push(...moduleCommandLines(module));
   }
 
-  return lines.join("\n");
-}
-
-function buildModuleHelpText(module: BotModule): string {
-  const lines = moduleCommandLines(module);
-  return `📋 **${module.name} 명령어**\n${lines.join("\n")}`;
+  return lines;
 }
 
 /**
@@ -65,7 +61,10 @@ export async function dispatch(
     const [sub, ...rest] = args;
     const cmd = sub ? module.commands[sub.toLowerCase()] : undefined;
     if (!cmd) {
-      await channel.send(buildModuleHelpText(module));
+      await sendChunked(channel, [
+        `📋 **${module.name} 명령어**`,
+        ...moduleCommandLines(module),
+      ]);
       return true;
     }
     await cmd.handler({ message, channel, args: rest });
