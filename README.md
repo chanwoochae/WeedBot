@@ -66,6 +66,8 @@ pm2 logs weedbot --lines 20
 
 **맥북(로컬)**: `~/project/.env.shared` → `WeedBot/.env`, `weed-console/.env.local`로 각각 심링크(2026-09-18 설정). 맥북에서 로컬로 여러 앱 띄울 때 값 하나만 관리하면 되고, Oracle의 `.env.shared`와는 별개 파일 — 값은 손으로 맞춰야 함(자동 동기화 없음). `PIPELINE_API_KEY`/`WEEDBOT_API_KEY`는 로컬 테스트 전용으로 새로 생성한 값.
 
+⚠️ **`OLLAMA_MODEL`을 `qwen3.6:27b`로 두지 말 것** — 이 모델은 기본 reasoning_effort가 "xhigh"라 "5만 답해줘" 같은 간단한 질문에도 몇 분~최대 20분씩 내부 사고(thinking)를 하느라 응답이 극도로 느려짐(Ollama는 reasoning_effort 조절 옵션 노출 안 함). 로컬엔 `gemma4:26b`로 전환(2026-09-18) — 동일 조건에서 약 20초 응답. 더 빠르면서 똑똑한 대안으로 `Qwen3.6 35B-A3B`(MoE, 활성 파라미터 3B라 8B급 속도) 후보 있음, 아직 미검증.
+
 ```env
 SUPABASE_URL=
 SUPABASE_KEY=
