@@ -1,4 +1,5 @@
 import { BotModule } from "../core/types";
+import { sendChunked } from "../core/discord.util";
 import {
   listPending,
   markDone,
@@ -28,13 +29,7 @@ export const trendivModule: BotModule = {
             `   ❌ ${item.block_reason ?? "알 수 없음"} | ${new Date(item.created_at).toLocaleString("ko-KR")}`,
         );
         const text = `📋 **차단 대기 목록 (${items.length}개)**\n\n${lines.join("\n\n")}`;
-        if (text.length <= 2000) {
-          await ctx.channel.send(text);
-        } else {
-          for (const line of lines) {
-            await ctx.channel.send(line);
-          }
-        }
+        await sendChunked(ctx.channel, text, lines);
       },
     },
 

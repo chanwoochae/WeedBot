@@ -47,7 +47,7 @@ client.on("messageCreate", async (message: Message) => {
   if (command.startsWith("!")) {
     const name = command.slice(1).toLowerCase();
     try {
-      const handled = await dispatch(name, args, { message, channel });
+      const handled = await dispatch(name, args, message, channel);
       if (handled) return;
     } catch (e) {
       console.error("❌ Command Error:", e);

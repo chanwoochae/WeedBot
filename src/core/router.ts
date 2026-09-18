@@ -1,13 +1,14 @@
-import { CommandContext, BotModule, ModuleCommand } from "./types";
+import { Message, SendableChannels } from "discord.js";
+import { BotModule, ModuleCommand } from "./types";
 
 // ─── 명령어 레지스트리 ─────────────────────────────────
 // 공용 명령어: !help, !clear, !model 처럼 네임스페이스 없이 바로 호출.
 // 모듈: !trendiv list 처럼 "!<모듈명> <서브커맨드>" 형태로 호출.
-const coreCommands = new Map<string, ModuleCommand>();
+const coreCommands: Record<string, ModuleCommand> = Object.create(null);
 const modules = new Map<string, BotModule>();
 
 export function registerCoreCommand(name: string, command: ModuleCommand): void {
-  coreCommands.set(name, command);
+  coreCommands[name] = command;
 }
 
 export function registerModule(module: BotModule): void {
@@ -18,26 +19,28 @@ function formatUsage(name: string, cmd: ModuleCommand): string {
   return `\`!${name}${cmd.usage ? " " + cmd.usage : ""}\` — ${cmd.description}`;
 }
 
+function moduleCommandLines(module: BotModule): string[] {
+  return Object.entries(module.commands).map(([sub, cmd]) =>
+    formatUsage(`${module.name} ${sub}`, cmd),
+  );
+}
+
 export function buildHelpText(): string {
   const lines: string[] = ["**공용 명령어**"];
-  for (const [name, cmd] of coreCommands) {
+  for (const [name, cmd] of Object.entries(coreCommands)) {
     lines.push(formatUsage(name, cmd));
   }
 
   for (const module of modules.values()) {
     lines.push(`\n**${module.name}** — ${module.description}`);
-    for (const [sub, cmd] of Object.entries(module.commands)) {
-      lines.push(formatUsage(`${module.name} ${sub}`, cmd));
-    }
+    lines.push(...moduleCommandLines(module));
   }
 
   return lines.join("\n");
 }
 
 function buildModuleHelpText(module: BotModule): string {
-  const lines = Object.entries(module.commands).map(([sub, cmd]) =>
-    formatUsage(`${module.name} ${sub}`, cmd),
-  );
+  const lines = moduleCommandLines(module);
   return `📋 **${module.name} 명령어**\n${lines.join("\n")}`;
 }
 
@@ -48,11 +51,12 @@ function buildModuleHelpText(module: BotModule): string {
 export async function dispatch(
   name: string,
   args: string[],
-  ctx: Omit<CommandContext, "args">,
+  message: Message,
+  channel: SendableChannels,
 ): Promise<boolean> {
-  const core = coreCommands.get(name);
+  const core = coreCommands[name];
   if (core) {
-    await core.handler({ ...ctx, args });
+    await core.handler({ message, channel, args });
     return true;
   }
 
@@ -61,10 +65,10 @@ export async function dispatch(
     const [sub, ...rest] = args;
     const cmd = sub ? module.commands[sub.toLowerCase()] : undefined;
     if (!cmd) {
-      await ctx.channel.send(buildModuleHelpText(module));
+      await channel.send(buildModuleHelpText(module));
       return true;
     }
-    await cmd.handler({ ...ctx, args: rest });
+    await cmd.handler({ message, channel, args: rest });
     return true;
   }
 
