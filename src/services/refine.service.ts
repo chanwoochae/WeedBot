@@ -8,7 +8,8 @@ export async function refineWithAgy(draftText: string): Promise<string> {
   try {
     return await new Promise<string>((resolve, reject) => {
       // 초안이 셸 명령으로 해석되지 않도록 인자로 전달하고, stdin 입력 대기로 멈추지 않게 한다.
-      const child = spawn("agy", ["-p", prompt], {
+      // 기본값 대신 품질 우선순위 1순위 모델을 명시적으로 사용한다.
+      const child = spawn("agy", ["-p", prompt, "--model", "Claude Opus 4.6 (Thinking)"], {
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
       });
