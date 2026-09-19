@@ -1,5 +1,9 @@
 import { spawn } from "node:child_process";
 
+// agy의 모델 카탈로그는 원격에서 동적으로 바뀔 수 있으므로,
+// 모델명 변경 시 코드 수정 없이 AGY_MODEL 환경변수로 대응할 수 있게 한다.
+function getAgyModel() { return process.env.AGY_MODEL ?? "Claude Opus 4.6 (Thinking)"; }
+
 // agy CLI로 답변 초안의 의미를 유지하며 표현을 다듬는다.
 // 정제는 부가 단계이므로 실행에 실패하면 원본 초안을 반환한다.
 export async function refineWithAgy(draftText: string): Promise<string> {
@@ -8,7 +12,8 @@ export async function refineWithAgy(draftText: string): Promise<string> {
   try {
     return await new Promise<string>((resolve, reject) => {
       // 초안이 셸 명령으로 해석되지 않도록 인자로 전달하고, stdin 입력 대기로 멈추지 않게 한다.
-      const child = spawn("agy", ["-p", prompt], {
+      // 환경변수로 지정한 모델 또는 품질 우선순위 1순위 기본 모델을 명시적으로 사용한다.
+      const child = spawn("agy", ["-p", prompt, "--model", getAgyModel()], {
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
       });
