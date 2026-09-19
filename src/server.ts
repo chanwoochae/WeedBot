@@ -7,7 +7,8 @@ import http from "http";
 import { processMarkup, MarkupRequest } from "./services/markup.service";
 import { verifyWebhookSignature } from "./services/github-app.service";
 import { handleIssueComment, IssueCommentPayload } from "./services/github-webhook.service";
-import { chat, checkActiveModel } from "./services/llm.service";
+import { chat, chatStream, checkActiveModel } from "./services/llm.service";
+import { refineWithAgy } from "./services/refine.service";
 import { getHistory, saveMessage, clearHistory } from "./services/history.service";
 
 const PORT = Number(process.env.WEEDBOT_HTTP_PORT ?? 3002);
@@ -99,6 +100,74 @@ export function startHttpServer() {
         console.error("[HTTP] /api/markup error:", msg);
         return send(res, 500, { error: msg });
       }
+    }
+
+    // ── Streaming chat endpoint ───────────────────────────
+    // 답변 청크를 NDJSON으로 전송하고, 선택적 정제와 대화 저장 후 최종 답변을 알린다.
+    if (req.method === "POST" && url.split("?")[0] === "/api/chat/message/stream") {
+      // 스트림 시작 전에 인증과 입력을 검사해 잘못된 요청은 일반 HTTP 오류로 응답한다.
+      if (!isAuthorized(req)) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: "Unauthorized" }));
+      }
+
+      let body: { userId?: unknown; message?: unknown; mode?: unknown } | null;
+      try {
+        const raw = await readBody(req);
+        body = JSON.parse(raw);
+      } catch (e) {
+        // 본문 읽기·JSON 파싱 실패는 아직 스트림을 시작하지 않았으므로 400으로 응답할 수 있다.
+        console.error("[HTTP] body parse error:", (e as Error).message);
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: "Invalid JSON" }));
+      }
+
+      if (typeof body?.userId !== "string" || !body.userId.trim()) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: "userId must be a non-empty string" }));
+      }
+      const userId = body.userId.trim();
+
+      if (typeof body.message !== "string" || !body.message.trim()) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: "message must be a non-empty string" }));
+      }
+      if (body.mode !== undefined && body.mode !== "fast" && body.mode !== "refine") {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ error: "mode must be fast or refine" }));
+      }
+      const message = body.message;
+      const mode = body.mode ?? "refine";
+
+      res.writeHead(200, {
+        "Content-Type": "application/x-ndjson",
+        "Cache-Control": "no-store",
+      });
+      try {
+        const history = await getHistory(userId);
+        // 서비스에서 받은 청크와 reset 신호를 전달해 폴백 시 클라이언트가 부분 답변을 교체하게 한다.
+        const result = await chatStream(message, history, (chunkText, opts) => {
+          res.write(JSON.stringify({ type: "chunk", text: chunkText, ...(opts?.reset ? { reset: true } : {}) }) + "\n");
+        });
+        let finalReply = result.reply;
+        if (mode === "refine") {
+          res.write(JSON.stringify({ type: "refining" }) + "\n");
+          finalReply = await refineWithAgy(result.reply);
+        }
+        await saveMessage(userId, "user", message);
+        await saveMessage(userId, "assistant", finalReply);
+        res.write(JSON.stringify({ type: "done", reply: finalReply, model: result.model }) + "\n");
+      } catch (e) {
+        // 200 스트림 응답을 시작했으므로 헤더 전송 후에는 상태코드를 바꿀 수 없다.
+        // 생성·정제·저장 중 오류는 같은 NDJSON 스트림의 error 이벤트로 클라이언트에 알린다.
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(`[HTTP] ${url} error:`, msg);
+        res.write(JSON.stringify({ type: "error", error: msg }) + "\n");
+      } finally {
+        // 성공·실패 모두 응답을 닫아 클라이언트가 다음 이벤트를 계속 기다리지 않게 한다.
+        res.end();
+      }
+      return;
     }
 
     // ── Chat endpoints ────────────────────────────────────
